@@ -1,4 +1,2 @@
-black==19.10b0
-docker==4.1.0
-pytest==5.3.4
-PyYAML==5.3
+# this will force pip look into setup.py for dependencies
+.

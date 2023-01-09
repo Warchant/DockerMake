@@ -1,23 +1,82 @@
+# FORK DESCRIPTION
+
+This is a fork of aviship/DockerMake taken at tag 0.9.0 (6d8ee50).
+On top of it, I made following changes:
+- **dependencies** key in yaml file. It specifies a list of files-dependencies of a "layer", which are downloaded during the build. Each file is accompanied by a sha256 hash, which ensures you download and use correct file.
+    ```yaml
+    base:
+      description: Base windows image
+      FROM: mcr.microsoft.com/windows:1809-KB5018419
+      dependencies:
+        # vcredist x86 2015+
+        - url: https://aka.ms/vs/17/release/vc_redist.x86.exe
+          sha256: ce4843a946ee3732eb2bfc098db5741dc5495c7bea204e11d379336dcc68e875
+        # vcredist x64 2015+
+        - url: https://aka.ms/vs/17/release/vc_redist.x64.exe
+          sha256: 2257b3fbe3c7559de8b31170155a433faf5b83829e67c589d5674ff086b868b9
+        # vcredist x86 2012
+        - url: https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe
+          sha256: b924ad8062eaf4e70437c8be50fa612162795ff0839479546ce907ffa8d6e386
+        # vcredist x64 2008
+        - url: https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe
+          sha256: 681be3e5ba9fd3da02c09d7e565adfa078640ed66a0d58583efad2c1e3cc4064
+      build_directory: .
+      ignore: |
+        **
+        !aka.ms/vs/17/release/vc_redist.x86.exe
+        !aka.ms/vs/17/release/vc_redist.x64.exe
+        !download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe
+        !download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe
+      build: |
+        COPY aka.ms/vs/17/release/vc_redist.x86.exe \
+            aka.ms/vs/17/release/vc_redist.x64.exe \
+            download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe \
+            download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe \
+            C:/temp/
+        RUN  C:/temp/vc_redist.x64.exe /install /passive /norestart \
+          && C:/temp/vc_redist.x86.exe /install /passive /norestart \
+          && C:/temp/vcredist_x86.exe /install /passive /norestart \
+          && C:/temp/vcredist_x64.exe /install /passive /norestart
+        RUN reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f \
+          && del /S /F /Q C:\temp
+    ```
+- **fixed pyyaml 6** - this tool was developed for pyyaml 5 and failed to work with pyyaml 6. This is fixed now.
+
 # Docker-make
 [![Codeship Status for avirshup/DockerMake](https://app.codeship.com/projects/d4a701b0-2114-0138-0bfb-1a499be1ccac/status?branch=master)](https://app.codeship.com/projects/382713)
 [ ![PyPI version](https://badge.fury.io/py/DockerMake.svg)](https://badge.fury.io/py/DockerMake)
 
 ## Table of Contents
-+ [What is it?](#what-is-it)
-+ [Install it](#install-it)
-+ [Run it](#run-it)
-+ [What you can do with it](#what-you-can-do-with-it)
-    * [Build automation](#build-automation)
-    * [Secrets and squashing](#secrets-and-squashing)
-    * [File handling](#file-handling)
-    * [Cache control](#cache-control)
-+ [How to write DockerMake.yml](#how-to-write-dockermakeyml)
-  - [Defining an image](#defining-an-image)
-  - [Image definition reference](#image-definition-reference)
-  - [Special fields](#special-fields)
-  - [Notes](#notes-on-dockermake.yml)
-+ [Example](#example)
-+ [Command line usage](#command-line-usage)
+- [FORK DESCRIPTION](#fork-description)
+- [Docker-make](#docker-make)
+  - [Table of Contents](#table-of-contents)
+  - [What is it?](#what-is-it)
+  - [Install it](#install-it)
+  - [Run it](#run-it)
+  - [What you can do with it](#what-you-can-do-with-it)
+      - [Build steps](#build-steps)
+      - [Build automation](#build-automation)
+      - [Secrets and squashing](#secrets-and-squashing)
+      - [File handling](#file-handling)
+      - [Cache control](#cache-control)
+  - [How to write DockerMake.yml](#how-to-write-dockermakeyml)
+    - [Defining an image](#defining-an-image)
+    - [Image definition reference](#image-definition-reference)
+      - [**`FROM`/`FROM_DOCKERFILE`**](#fromfrom_dockerfile)
+      - [**`build`**](#build)
+      - [**`requires`**](#requires)
+      - [**`build_directory`**](#build_directory)
+      - [**`ignore`/`ignorefile`**](#ignoreignorefile)
+      - [**`description`**](#description)
+      - [**`copy_from`**](#copy_from)
+      - [**`squash`**](#squash)
+      - [**`secret_files`**](#secret_files)
+    - [Special fields](#special-fields)
+      - [`_SOURCES_`](#_sources_)
+      - [`_ALL_`](#_all_)
+    - [Notes on DockerMake.yml](#notes-on-dockermakeyml)
+  - [Example](#example)
+  - [Command line usage](#command-line-usage)
 
 ## What is it?
 A command line tool to build and manage stacks of docker images. You can mix and match different sets of build instructions as a dependency graph to create maintainable and extensible stacks of docker images.
@@ -28,10 +87,10 @@ A command line tool to build and manage stacks of docker images. You can mix and
 Requires [Docker](https://www.docker.com/products/docker) and Python 2.7 or 3.5+.
 
 ```
-pip install DockerMake 
+pip install DockerMake
 ```
 
-This will install the command line tool, `docker-make`, and its supporting python package, which you can import as `import dockermake`. 
+This will install the command line tool, `docker-make`, and its supporting python package, which you can import as `import dockermake`.
 
 
 ## Run it
@@ -57,13 +116,13 @@ A `DockerMake.yml` file contains discrete build "steps". These steps can depend 
  * **new**: beta support for dockerfile build arguments
  * **new**: specify custom `.dockerignore` files for any given build step
  * Automated registry login and image pushes
- 
+
 #### Secrets and squashing
  - [squash](#squash) arbitrary parts of your build (using `squash: true` in a step definition) without busting the cache
  - Designate [`secret_files`](#secret_files) to erase them from intermediate layers (In the step definition, use `secret_files: ['path1', 'path2', ...]`)
- 
+
 **WARNING:** these features are in alpha - use with extreme caution
- 
+
 #### File handling
  * Create builds that ADD or COPY files from anywhere on your file system
  * Build artifacts in one image, then copy them into smaller images for deployment
@@ -72,8 +131,8 @@ A `DockerMake.yml` file contains discrete build "steps". These steps can depend 
  - Invalidate docker's build cache at a specific step in the build using `--bust-cache [stepname]`
  - **new**: Use specific images to [resolve docker's build cache](https://github.com/moby/moby/issues/26065) (using `--cache-repo [repo]` and/or `--cache-tag [tag]`)
  - Force a clean rebuild without using the cache (using `--no-cache`)
- 
- 
+
+
 ## How to write DockerMake.yml
 DockerMake.yml lets you split your image build up into discrete, easy to manage _steps_ that can be mixed together (as a dependency graph) to produce your desired container image.
 
@@ -185,7 +244,7 @@ data-image:
       *~
       *.tmp
 ```
-  
+
 #### **`description`**
 An arbitrary comment (ignored by `docker-make`)
 
@@ -214,7 +273,7 @@ Note that setting `squash: True` for a step only squashes the layers generated b
 Additionally, unlike the vanilla `docker build --squash` command, downstream image builds can use the squashed image in their cache, so that squashing doesn't force you to repeatedly re-run the same downstream build steps.
 
 *Example:*
-In this example, we create a huge file in the image, do something with it, then erase it. 
+In this example, we create a huge file in the image, do something with it, then erase it.
 
 ```yaml
 count-a-big-file:
@@ -230,7 +289,7 @@ Let's build it and check the size:
 $ docker-make count-a-big-file
 [...]
 docker-make finished.
-Built: 
+Built:
  * count-a-big-file
 $ docker images count-a-big-file
 REPOSITORY         ...   SIZE
@@ -247,13 +306,13 @@ count-a-big-file:
         RUN wc /root/bigfile > /root/numbiglines
         RUN rm /root/bigfile
 ```
-  
-And we find that the deleted file is no longer taking up space:  
+
+And we find that the deleted file is no longer taking up space:
 ```bash
 $ docker-make count-a-big-file
 [...]
 docker-make finished.
-Built: 
+Built:
  * count-a-big-file
 $ docker images count-a-big-file
 REPOSITORY         ...   SIZE
@@ -267,14 +326,14 @@ count-a-big-file   ...   4.15MB
  - This is an alpha-stage feature. DO NOT rely on it as a security tool. You must carefully verify that your final image, and all its layers AND its history, are free of sensitive information before deploying or publishing them.
  - It relies on [experimental docker daemon features](https://github.com/docker/docker-ce/blob/master/components/cli/experimental/README.md).
  - Although your final image won't contain your secrets, they will be present in intermediate images on your build machine. Your secrets will be exposed to all `docker` users on your build machine.
- - When you define `secret_files` for a step, it only erases files that are added in the `build` definition _for that step_. Files added in other steps will remain exposed in your image's layers. 
+ - When you define `secret_files` for a step, it only erases files that are added in the `build` definition _for that step_. Files added in other steps will remain exposed in your image's layers.
 
 **Background**
 
 It's often necessary to perform some form of authentication during a build - for instance, you might need to clone a private git repository or download dependencies from a private server. However, it's quite challenging to do so without leaving your credentials inside a layer of the final docker image or its history.
 
 Files added or created in a given step can be designated as `secret_files` in DockerMake.yml. These files will be automatically erased at the end of the step, and the step's layers will be squashed to keep the files out of the history.
- 
+
  **Example**
 ```yaml
 my-secret-steps:
@@ -305,17 +364,17 @@ Please note that relative file paths in each file are always interpreted _relati
 
 By default, running `docker-make --all` will build all well-defined images defined in a file (and any files included via `_SOURCES_`). Images without a `FROM` or `FROM_DOCKERFILE` field in any of their requirements will be ignored.
 
-Alternatively, you can use the `_ALL_` field to designate specific images to build. For example, in the following definition, `docker-make --all` will only build `imgone` and `imgtwo`, not `baseimage`: 
+Alternatively, you can use the `_ALL_` field to designate specific images to build. For example, in the following definition, `docker-make --all` will only build `imgone` and `imgtwo`, not `baseimage`:
 
 ```yaml
 _ALL_:
  - imgone
  - imgtwo
- 
+
 baseimage:
   FROM: [...]
   [...]
- 
+
 imgone: [...]
 
 imgtwo: [...]
@@ -323,7 +382,7 @@ imgtwo: [...]
 
 Note that the `_ALL_` fields from any files included via `_SOURCES_` are ignored.
 
- 
+
 ### Notes on DockerMake.yml
 
 **Relative paths**: Several of these fields include paths on your local filesystem. They may be absolute or relative; _relative_ paths are resolved relative to the DockerMake.yml file they appear in. Use of `~` is allowed to denote the home directory.
@@ -351,8 +410,8 @@ Here's the `DockerMake.yml` file:
 devbase:
  FROM: phusion/baseimage
  build: |
-  RUN apt-get -y update && apt-get -y install 
-      build-essential 
+  RUN apt-get -y update && apt-get -y install
+      build-essential
    && mkdir -p /opt
 
 airline_data:
@@ -394,7 +453,7 @@ Here's the dependency graph and generated Dockerfiles:
 
 
 
-## Command line usage 
+## Command line usage
 ```
 usage: docker-make [-h] [-f MAKEFILE] [-a] [-l] [--build-arg BUILD_ARG]
                    [--requires [REQUIRES [REQUIRES ...]]] [--name NAME] [-p]

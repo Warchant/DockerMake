@@ -75,3 +75,7 @@ target/
 
 # Created by .ignore support plugin (hsz.mobi)
 pip-wheel-metadata
+
+.vscode
+/venv
+/.venv

@@ -30,7 +30,7 @@ from . import utils
 RECOGNIZED_KEYS = set(
     (
         "requires build_directory build copy_from FROM description _sourcefile"
-        " FROM_DOCKERFILE ignore ignorefile squash secret_files"
+        " FROM_DOCKERFILE ignore ignorefile squash secret_files dependencies"
     ).split()
 )
 SPECIAL_FIELDS = set("_ALL_ _SOURCES_".split())

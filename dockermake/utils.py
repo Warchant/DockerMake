@@ -14,12 +14,18 @@
 from __future__ import print_function
 
 import collections
+import functools
+import hashlib
 import os
+import requests
+import pathlib
+import shutil
 import textwrap
 
 import yaml
 import docker.errors
 from termcolor import cprint, colored
+from tqdm.auto import tqdm
 
 from . import errors
 
@@ -214,7 +220,7 @@ def push(client, name):
 def _linestream(textstream):
     for item in textstream:
         for line in item.splitlines():
-            yield yaml.load(line)
+            yield yaml.safe_load(line)
 
 
 def human_readable_size(num, suffix="B"):
@@ -314,3 +320,52 @@ def set_build_cachefrom(cache_from, buildargs, client):
                 "  No build cache sources present; ignoring --cache-repo and --cache-tag",
                 "blue",
             )
+
+
+def download_file(url, filename):
+    """Download a file from a *url*, and save it to *filename* path."""
+
+    def _progressbar(*args, **kwargs):
+        # mininterval = 10 sec
+        return tqdm.wrapattr(*args, **kwargs, mininterval=10)
+
+    r = requests.get(url, stream=True, allow_redirects=True)
+    if r.status_code != 200:
+        r.raise_for_status()  # Will only raise for 4xx codes, so...
+        raise RuntimeError(f"Request to {url} returned status code {r.status_code}")
+
+    file_size = int(r.headers.get("Content-Length", 0))
+
+    path = pathlib.Path(filename).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    r.raw.read = functools.partial(r.raw.read, decode_content=True)
+
+    # Decompress if needed
+    with _progressbar(
+        r.raw,
+        "read",
+        total=file_size,
+        desc=colored(f"  Downloading {os.path.basename(path)}", "blue")
+    ) as r_raw:
+        with path.open("wb") as f:
+            shutil.copyfileobj(r_raw, f)
+
+    os.chmod(filename, 0o777)
+
+    return path
+
+
+def sha256_file(file: str) -> str:
+    """Calculate sha256 hash from a file efficiently"""
+    assert os.path.exists(file), f"File does not exist: {file}"
+    sha256 = hashlib.sha256()
+    BUF_SIZE = 2**22  # 4MB
+    with open(file, "rb") as f:
+        while True:
+            data = f.read(BUF_SIZE)
+            if not data:
+                break
+            sha256.update(data)
+
+    return sha256.hexdigest()

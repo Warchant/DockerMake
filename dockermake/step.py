@@ -58,6 +58,7 @@ class BuildStep(object):
         self.imagename = imagename
         self.baseimage = baseimage
         self.img_def = img_def
+        self.dependencies = img_def.get("dependencies", [])
         self.buildname = buildname
         self.build_dir = img_def.get("build_directory", None)
         self.bust_cache = bust_cache
@@ -112,6 +113,57 @@ class BuildStep(object):
             colored("defined in", "blue"),
             colored(self.sourcefile, "blue", attrs=["bold"]),
         )
+
+        # download required external dependencies
+        for dep in self.dependencies:
+            # verify yaml is correct
+            for attr in ["url", "sha256"]:
+                if attr not in dep:
+                    raise ValueError("Dependency {} does not have required attribute: {}".format(dep, attr))
+
+            url = dep['url']
+            sha256 = dep['sha256']
+            output = url.replace("https://", "").replace("http://", "")
+
+            if os.path.exists(output):
+                # file already exists.
+                # check its hash and compare with expected one.
+                # if differs - delete it, and re-download.
+                if not os.path.isfile(output):
+                    raise ValueError("File {} is not a file! Exiting...".format(output))
+
+                os.chmod(output, 0o777)
+
+                hash = utils.sha256_file(output)
+                if sha256 == hash:
+                    print(
+                        colored("  Dependency {} checksum matched".format(os.path.basename(url)), "blue")
+                    )
+                    continue
+
+                print(
+                    colored("File exists, but its sha256 does not match expected", "red", attrs=["bold"]),
+                    colored("Expected: {}".format(sha256), "yellow"),
+                    colored("Got     : {}".format(hash), "yellow")
+                )
+
+                # remove it and download from scratch
+                os.remove(output)
+
+            base = os.path.dirname(output)
+            if len(base) > 0:
+                os.makedirs(base, exist_ok=True)
+
+            # we determined that we need to download this file
+            utils.download_file(url=url, filename=output)
+            hash = utils.sha256_file(output)
+            if hash != sha256:
+                print(
+                    colored("Downloaded file, but its checksum is not same as expected", "red", attrs=["bold"]),
+                    colored("Expected: {}".format(sha256), "yellow"),
+                    colored("Got     : {}".format(hash), "yellow"),
+                )
+                raise ValueError("Downloaded file checksum does not match expected")
 
         if self.build_first and not self.build_first.built:
             self.build_external_dockerfile(client, self.build_first)
