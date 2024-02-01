@@ -96,24 +96,7 @@ class BuildStep(object):
 
         return list(filter(bool, lines))
 
-    def build(self, client, pull=False, usecache=True):
-        """
-        Drives an individual build step. Build steps are separated by build_directory.
-        If a build has zero one or less build_directories, it will be built in a single
-        step.
-
-        Args:
-            client (docker.Client): docker client object that will build the image
-            pull (bool): whether to pull dependent layers from remote repositories
-            usecache (bool): whether to use cached layers or rebuild from scratch
-        """
-        print(
-            colored("  Building step", "blue"),
-            colored(self.imagename, "blue", attrs=["bold"]),
-            colored("defined in", "blue"),
-            colored(self.sourcefile, "blue", attrs=["bold"]),
-        )
-
+    def _download_deps(self):
         # download required external dependencies
         for dep in self.dependencies:
             # verify yaml is correct
@@ -164,6 +147,26 @@ class BuildStep(object):
                     colored("Got     : {}".format(hash), "yellow"),
                 )
                 raise ValueError("Downloaded file checksum does not match expected")
+
+    def build(self, client, pull=False, usecache=True):
+        """
+        Drives an individual build step. Build steps are separated by build_directory.
+        If a build has zero one or less build_directories, it will be built in a single
+        step.
+
+        Args:
+            client (docker.Client): docker client object that will build the image
+            pull (bool): whether to pull dependent layers from remote repositories
+            usecache (bool): whether to use cached layers or rebuild from scratch
+        """
+        print(
+            colored("  Building step", "blue"),
+            colored(self.imagename, "blue", attrs=["bold"]),
+            colored("defined in", "blue"),
+            colored(self.sourcefile, "blue", attrs=["bold"]),
+        )
+
+        self._download_deps()
 
         if self.build_first and not self.build_first.built:
             self.build_external_dockerfile(client, self.build_first)
