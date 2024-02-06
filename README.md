@@ -1,7 +1,9 @@
 # FORK DESCRIPTION
 
-This is a fork of aviship/DockerMake taken at tag 0.9.0 (6d8ee50).
+This is a fork of avirshup/DockerMake taken at tag 0.9.0 (6d8ee50).
 On top of it, I made following changes:
+- **removed versioneer** - as it is breaks for python 3.12.
+- **added tox** - to test if the package can be installed in pythons 3.7..3.12.
 - **dependencies** key in yaml file. It specifies a list of files-dependencies of a "layer", which are downloaded during the build. Each file is accompanied by a sha256 hash, which ensures you download and use correct file.
     ```yaml
     base:
