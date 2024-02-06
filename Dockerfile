@@ -7,6 +7,6 @@ RUN pip install -r /tmp/requirements.txt
 ADD . /opt/DockerMake
 WORKDIR /opt/DockerMake
 RUN python setup.py sdist \
- && pip install dist/DockerMake*.tar.gz 
+ && pip install dist/DockerMake*.tar.gz
 
 WORKDIR /opt

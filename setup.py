@@ -1,10 +1,8 @@
 from setuptools import setup
-import versioneer
 
 setup(
     name="DockerMake",
-    version=versioneer.get_version(),
-    cmdclass=versioneer.get_cmdclass(),
+    version="0.9.1",
     packages=["dockermake"],
     license="Apache 2.0",
     author="Aaron Virshup",

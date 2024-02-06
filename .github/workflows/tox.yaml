@@ -1,0 +1,19 @@
+name: Run tox in Docker container
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    container: warchantua/tox-with-py37to12
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: tox
+      run: tox
